@@ -3,25 +3,33 @@
 $inputOptions = getopt('i:o:');
 
 if (!isset($inputOptions['i'])) {
-    echo 'Must provide an input file.' . PHP_EOL;
-    exit;
-}
-if (!isset($inputOptions['o'])) {
-    echo 'Must provide an output file.' . PHP_EOL;
-    exit;
+    $inputFile = fopen('php://stdin', 'r');
+} else {
+    $inputFile  = $inputOptions['i'];
 }
 
-$inputFile  = $inputOptions['i'];
-$outputFile = $inputOptions['o'];
+$output = null;
+if (isset($inputOptions['o'])) {
+    $output = $inputOptions['o'];
+}
 
-function processFile($filename) {
 
-    if (!is_readable($filename)) {
-        echo sprintf('Cannot find file "%s".', $filename) . PHP_EOL;
-        exit;
+function processFile($filenameOrHandle) {
+
+    if (!is_resource($filenameOrHandle)) {
+        if (!is_readable($filenameOrHandle)) {
+            echo sprintf('Cannot find file "%s".', $filenameOrHandle) . PHP_EOL;
+            exit;
+        }
+
+        $dir = dirname($filenameOrHandle);
+        $handle = fopen($filenameOrHandle, 'r');
+    } else {
+        $dir = getcwd();
+        $handle = $filenameOrHandle;
     }
 
-    $fileContents = file_get_contents($filename);
+    $fileContents = stream_get_contents($handle);
 
     // Single "include" command at the moment
     preg_match_all('/{{\s*(include)\s+([^\s]+)+\s*}}/i', $fileContents, $commandPart);
@@ -29,7 +37,7 @@ function processFile($filename) {
     if (count($commandPart) > 2) {
         $numberOfCommands = count($commandPart[0]);
         for ($commandNumber = 0; $commandNumber < $numberOfCommands; $commandNumber++) {
-            $includedFilePath = dirname($filename) . '/' . $commandPart[2][$commandNumber];
+            $includedFilePath = $dir . '/' . $commandPart[2][$commandNumber];
             $fileContents = str_replace($commandPart[0][$commandNumber], processFile($includedFilePath), $fileContents);
         }
     }
@@ -39,5 +47,9 @@ function processFile($filename) {
 
 $generatedFileContents = processFile($inputFile);
 
-echo sprintf('Creating output file "%s".', $outputFile) . PHP_EOL;
-file_put_contents($outputFile, $generatedFileContents);
+if (is_string($output)) {
+    echo sprintf('Creating output file "%s".', $output) . PHP_EOL;
+    file_put_contents($output, $generatedFileContents);
+} else {
+    echo $generatedFileContents;
+}
